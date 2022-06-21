@@ -1,0 +1,59 @@
+on:
+  workflow_dispatch:
+#  schedule:
+#  - cron: '0 0 * * *'
+
+env:
+  REPO_UPSTREAM: https://github.com/jordansissel/fpm.git
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+
+    steps:
+    - name: checkout ci
+      uses: actions/checkout@v2
+      with:
+        ref: ci
+        fetch-depth: 1
+        token: ${{ secrets.GH_PAT }}
+
+    - name: Identify upstream branches
+      id: upstream
+      run: |
+        echo "::set-output name=branches::main"
+
+    - name: Sync upstream branch
+      run: |
+        git remote add upstream ${{ env.REPO_UPSTREAM }}
+        for upstream_branch in $(echo "${{ steps.upstream.outputs.branches }}" | tr ',' '\n'); do
+          own_branch=$(echo "source-${upstream_branch}")
+          echo "::group::Updating branch ${own_branch}"
+
+          git fetch upstream refs/heads/${upstream_branch}:${own_branch}
+          git checkout ${own_branch}
+
+          git tag -l | awk '!/^v/ || /-/ || /\^/{print}' | xargs git tag -d
+
+          git push origin ${own_branch}
+          git push origin ${own_branch} --tags
+          echo "::endgroup::"
+          sleep 1s
+        done
+        git checkout ci
+
+    - name: Identify LATEST
+      run: |
+        git ls-remote --tags ${{ env.REPO_UPSTREAM }} | awk -F '/' '!/-/ && !/\^/ && /\/v/{$0=$NF;print}' | sort -Vr | head -n 1 > LATEST
+        comm -23 <(git ls-remote --tags https://github.com/${{ github.repository }} | awk -F '/' '!/\^/{$0=$NF;print}' | sort -V) <(sort -V VERSIONS) | head -n 1 >> VERSIONS
+        if ! git diff-index --quiet HEAD --; then
+          echo "IF result: $?"
+          git status
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add LATEST VERSIONS
+          git commit -m "ci: Bump LATEST($(cat LATEST)) and VERSIONS($(tail -n 1 VERSIONS))" || true
+          git push origin ci --quiet || true
+        fi
