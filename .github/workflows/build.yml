@@ -18,82 +18,79 @@ jobs:
     strategy:
       fail-fast: false
     steps:
-    - name: checkout ci
-      uses: actions/checkout@v2
-      with:
-        ref: ci
-        path: ci
-        fetch-depth: 1
-        token: ${{ secrets.GH_PAT }}
+      - name: checkout ci
+        uses: actions/checkout@v2
+        with:
+          ref: ci
+          path: ci
+          fetch-depth: 1
+          token: ${{ secrets.GH_PAT }}
 
-    - name: vars
-      id: vars_ci
-      run: |
-       echo "::set-output name=LATEST::$(cat ci/LATEST)"
-        if [[ -n "${{ github.event.inputs.build_version }}" ]]; then
-                INPUT="${{ github.event.inputs.build_version }}"
-        else
-                INPUT=$(tail -n1 ci/VERSIONS)
-        fi
-        echo "::set-output name=REF::${INPUT}"
-        if [[ "$(cat ci/LATEST)" == "${INPUT}" ]]; then
-                echo "::set-output name=TAG::latest"
-        else
-                echo "::set-output name=TAG::dev"
-        fi
+      - name: vars
+        id: vars_ci
+        run: |
+         echo "::set-output name=LATEST::$(cat ci/LATEST)"
+          if [[ -n "${{ github.event.inputs.build_version }}" ]]; then
+                  INPUT="${{ github.event.inputs.build_version }}"
+          else
+                  INPUT=$(tail -n1 ci/VERSIONS)
+          fi
+          echo "::set-output name=REF::${INPUT}"
+          if [[ "$(cat ci/LATEST)" == "${INPUT}" ]]; then
+                  echo "::set-output name=TAG::latest"
+          else
+                  echo "::set-output name=TAG::dev"
+          fi
 
-    - name: checkout source
-      uses: actions/checkout@v2
-      with:
-        ref: ${{ steps.vars_ci.outputs.REF }}
-        path: ${{ steps.vars_ci.outputs.REF }}
-        fetch-depth: 1
-        token: ${{ secrets.GH_PAT }}
+      - name: checkout source
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ steps.vars_ci.outputs.REF }}
+          path: ${{ steps.vars_ci.outputs.REF }}
+          fetch-depth: 1
+          token: ${{ secrets.GH_PAT }}
 
-   - name: Setup Docker
-      uses: docker-practice/actions-setup-docker@master
-      with:
-        docker_channel: stable
-        docker_cli_experimental: enabled
-        docker_daemon_json: |
-          {
-            "experimental": true
-          }
+      - name: Setup Docker
+        uses: docker-practice/actions-setup-docker@master
+        with:
+          docker_channel: stable
+          docker_cli_experimental: enabled
+          docker_daemon_json: '{"experimental": true }'
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
 
-    - name: Log in to ghcr
-      if: github.event_name != 'pull_request'
-      uses: docker/login-action@v1
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to ghcr
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Extract metadata (tags, labels) for Docker
-      id: meta
-      uses: docker/metadata-action@v4
-      with:
-        images: ghcr.io/${{ github.repository_owner }}/fpm
-        flavor: |
-          latest=false
-        tags: |
-          type=semver,pattern=v{{major}}.{{minor}}.{{patch}},value=${{ steps.vars_ci.outputs.REF }}
-          type=semver,pattern=v{{major}}.{{minor}},value=${{ steps.vars_ci.outputs.REF }}
-          type=semver,pattern=v{{major}},value=${{ steps.vars_ci.outputs.REF }}
-          type=raw,${{ steps.vars_ci.outputs.TAG }}
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/fpm
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern=v{{major}}.{{minor}}.{{patch}},value=${{ steps.vars_ci.outputs.REF }}
+            type=semver,pattern=v{{major}}.{{minor}},value=${{ steps.vars_ci.outputs.REF }}
+            type=semver,pattern=v{{major}},value=${{ steps.vars_ci.outputs.REF }}
+            type=raw,${{ steps.vars_ci.outputs.TAG }}
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v3
-      with:
-        context: ${{ steps.vars_ci.outputs.REF }}
-        platforms: linux/amd64
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        build-args:
-          RELEASE=${{ steps.vars_ci.outputs.REF }}
-          BASE_ENV=everything
-          TARGET=release
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: ${{ steps.vars_ci.outputs.REF }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args:
+            RELEASE=${{ steps.vars_ci.outputs.REF }}
+            BASE_ENV=everything
+            TARGET=release
 
