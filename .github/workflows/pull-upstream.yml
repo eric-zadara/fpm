@@ -13,7 +13,6 @@ jobs:
       fail-fast: true
     permissions:
       contents: write
-      workflows: write
 
     steps:
     - name: checkout ci
@@ -21,7 +20,7 @@ jobs:
       with:
         ref: ci
         fetch-depth: 1
-#        token: ${{ secrets.GH_PAT }}
+        token: ${{ secrets.GH_PAT }}
 
     - name: Identify upstream branches
       id: upstream
